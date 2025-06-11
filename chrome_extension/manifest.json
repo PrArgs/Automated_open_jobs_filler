@@ -1,17 +1,37 @@
 {
   "manifest_version": 3,
-  "name": "Job URL Saver",
+  "name": "Job Application Tracker",
   "version": "1.0",
-  "description": "Save job URLs to Google Sheet.",
-  "permissions": ["activeTab", "scripting"],
-  "host_permissions": ["http://localhost:5000/*"],
+  "description": "Track your job applications with ease",
+  "permissions": [
+    "storage",
+    "tabs",
+    "identity"
+  ],
+  "host_permissions": [
+    "http://localhost:5000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icon.png"
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
   },
-  "background": {
-    "service_worker": "background.js"
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "oauth2": {
+    "client_id": "${YOUR_CLIENT_ID}",
+    "scopes": [
+      "https://www.googleapis.com/auth/spreadsheets",
+      "https://www.googleapis.com/auth/drive"
+    ]
   }
 }

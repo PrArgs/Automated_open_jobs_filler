@@ -1,0 +1,9 @@
+{
+  "name": "com.jobtracker.server",
+  "description": "Job Application Tracker Native Messaging Host",
+  "path": "server_host.py",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://${YOUR_EXTENSION_ID}/"
+  ]
+} 
