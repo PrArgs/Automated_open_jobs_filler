@@ -14,9 +14,7 @@ async function createUserSpreadsheet() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        token: await getAuthToken()
-      })
+      body: JSON.stringify({})
     });
     const data = await response.json();
     if (data.spreadsheetId) {
@@ -29,35 +27,80 @@ async function createUserSpreadsheet() {
   return null;
 }
 
-// Get OAuth token
-async function getAuthToken() {
+// Start Flask server automatically using a different approach
+async function startFlaskServer() {
   try {
-    const token = await chrome.identity.getAuthToken({ interactive: true });
-    return token;
+    // Try to start server by opening a new tab with a special URL
+    // This will trigger the server to start
+    const response = await fetch('http://localhost:5000/start-server', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (response.ok) {
+      console.log('Flask server started successfully');
+      return true;
+    } else {
+      console.error('Failed to start server');
+      return false;
+    }
   } catch (error) {
-    console.error('Error getting auth token:', error);
-    return null;
+    console.error('Server start error:', error);
+    return false;
   }
+}
+
+// Check if server is running and start if needed
+async function ensureServerRunning() {
+  try {
+    const response = await fetch('http://localhost:5000/health', { 
+      method: 'GET',
+      mode: 'no-cors' // Avoid CORS issues
+    });
+    return true; // Server is running
+  } catch (error) {
+    console.log('Server not running, attempting to start...');
+    return await startFlaskServer();
+  }
+}
+
+// Wait for server to be ready
+async function waitForServer(maxAttempts = 30) {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const response = await fetch('http://localhost:5000/health');
+      if (response.ok) {
+        console.log('Server is ready!');
+        return true;
+      }
+    } catch (error) {
+      // Server not ready yet
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+  }
+  return false;
 }
 
 // Initialize extension
 async function initialize() {
+  // Ensure server is running first
+  const serverStarted = await ensureServerRunning();
+  
+  if (serverStarted) {
+    // Wait for server to be ready
+    const serverReady = await waitForServer();
+    if (!serverReady) {
+      console.error('Server failed to start within timeout');
+      return;
+    }
+  }
+  
   let spreadsheetId = await checkUserSpreadsheet();
   if (!spreadsheetId) {
     spreadsheetId = await createUserSpreadsheet();
   }
-  
-  // Start local server if not running
-  fetch('http://localhost:5000/health')
-    .catch(() => {
-      // Server not running, start it
-      chrome.runtime.sendNativeMessage('com.jobtracker.server', 
-        { command: 'start_server' },
-        (response) => {
-          console.log('Server start response:', response);
-        }
-      );
-    });
 }
 
 // Listen for extension installation
@@ -65,13 +108,28 @@ chrome.runtime.onInstalled.addListener(() => {
   initialize();
 });
 
+// Listen for extension startup
+chrome.runtime.onStartup.addListener(() => {
+  initialize();
+});
+
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'submitJob') {
-    submitJob(request.data)
-      .then(response => sendResponse(response))
-      .catch(error => sendResponse({ error: error.message }));
-    return true; // Will respond asynchronously
+    // Ensure server is running before submitting
+    ensureServerRunning().then(() => {
+      submitJob(request.data)
+        .then(response => sendResponse(response))
+        .catch(error => sendResponse({ error: error.message }));
+    });
+    return true;
+  }
+  
+  if (request.action === 'ensureServer') {
+    ensureServerRunning().then(success => {
+      sendResponse({ success });
+    });
+    return true;
   }
 });
 
@@ -83,10 +141,7 @@ async function submitJob(jobData) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        ...jobData,
-        token: await getAuthToken()
-      })
+      body: JSON.stringify(jobData)
     });
     return await response.json();
   } catch (error) {
